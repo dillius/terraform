@@ -1,0 +1,41 @@
+name: OpenTofu
+
+on:
+  pull_request:
+    paths:
+      - '**.tf'
+      - '**.tftpl'
+      - '.github/workflows/terraform.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: fmt, validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: "1.8.0"
+
+      - name: tofu fmt
+        run: tofu fmt -check -recursive
+
+      - name: tofu init (no backend)
+        run: tofu init -backend=false
+
+      - name: tofu validate
+        run: tofu validate
+
+      # `tofu plan` is intentionally disabled until a remote state backend
+      # and OpenStack credentials are wired into CI. See README.
+      # - name: tofu plan
+      #   run: tofu plan
+      #   env:
+      #     OS_CLOUD: rumble

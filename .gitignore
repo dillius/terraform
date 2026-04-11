@@ -1,0 +1,25 @@
+# State files
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Plan output
+*.tfplan
+
+# Provider plugin cache (keep .terraform.lock.hcl committed)
+.terraform/
+.terraform.tfstate.lock.info
+
+# Variable files that may hold secrets
+*.auto.tfvars
+*.auto.tfvars.json
+terraform.tfvars
+terraform.tfvars.json
+!terraform.tfvars.example
+
+# Generated SSH keys
+.ssh/

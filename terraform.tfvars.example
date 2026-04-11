@@ -1,0 +1,20 @@
+# Copy this file to terraform.tfvars and fill in values.
+# terraform.tfvars is gitignored.
+
+# Name of the cloud entry in ~/.config/openstack/clouds.yaml
+openstack_cloud = "rumble"
+
+# Compute
+instance_name = "web-host"
+image_name    = "Ubuntu 24.04 LTS"
+flavor_name   = "m1.small"
+
+# Networking — names vary by provider; check the Rumble/OpenStack dashboard
+network_name          = "private"
+external_network_name = "public"
+
+# Your personal SSH public key (installed alongside the TF-managed key)
+ssh_pubkey_path = "~/.ssh/id_ed25519.pub"
+
+# Optional: restrict SSH to your IP
+# allowed_ssh_cidrs = ["203.0.113.42/32"]
