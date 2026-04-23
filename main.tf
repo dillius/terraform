@@ -51,8 +51,18 @@ resource "openstack_networking_secgroup_rule_v2" "https" {
   security_group_id = openstack_networking_secgroup_v2.web.id
 }
 
+data "openstack_images_image_v2" "ubuntu" {
+  name = var.image_name
+}
+
 data "openstack_networking_network_v2" "internal" {
   name = var.network_name
+}
+
+resource "openstack_blockstorage_volume_v3" "boot" {
+  name     = "${var.instance_name}-boot"
+  size     = var.volume_size
+  image_id = data.openstack_images_image_v2.ubuntu.id
 }
 
 resource "openstack_networking_port_v2" "web" {
@@ -70,10 +80,17 @@ locals {
 
 resource "openstack_compute_instance_v2" "web" {
   name        = var.instance_name
-  image_name  = var.image_name
   flavor_name = var.flavor_name
   key_pair    = openstack_compute_keypair_v2.tf.name
   user_data   = local.cloud_init
+
+  block_device {
+    uuid                  = openstack_blockstorage_volume_v3.boot.id
+    source_type           = "volume"
+    destination_type      = "volume"
+    boot_index            = 0
+    delete_on_termination = false
+  }
 
   network {
     port = openstack_networking_port_v2.web.id

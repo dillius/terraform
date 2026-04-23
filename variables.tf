@@ -47,3 +47,9 @@ variable "allowed_web_cidrs" {
   type        = list(string)
   default     = ["0.0.0.0/0"]
 }
+
+variable "volume_size" {
+  description = "Size of the root block storage volume in GiB."
+  type        = number
+  default     = 20
+}

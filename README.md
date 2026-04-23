@@ -29,10 +29,21 @@ Install OpenTofu:
 brew install opentofu
 ```
 
-## Credentials
+## Initial setup
 
-The provider reads `~/.config/openstack/clouds.yaml`. Once you have Rumble API
-credentials, create that file:
+### 1. Get credentials from Rumble Cloud
+
+Log into the Rumble Cloud dashboard and navigate to **API Access** (or
+**Credentials**). Download the `clouds.yaml` file if offered — otherwise note
+the values needed below.
+
+### 2. Create the clouds.yaml file
+
+```sh
+mkdir -p ~/.config/openstack
+```
+
+Create `~/.config/openstack/clouds.yaml` with the values from the dashboard:
 
 ```yaml
 clouds:
@@ -42,6 +53,7 @@ clouds:
       username: <username>
       password: <password>
       project_name: <project>
+      project_id: <project-id>
       user_domain_name: Default
       project_domain_name: Default
     region_name: <region>
@@ -49,18 +61,30 @@ clouds:
     identity_api_version: 3
 ```
 
-Rumble should provide the exact values in their dashboard. The `cloud` name
-(`rumble`) must match `openstack_cloud` in `terraform.tfvars`.
+The `cloud` name (`rumble`) must match `openstack_cloud` in `terraform.tfvars`.
+
+### 3. Lock down the file
+
+```sh
+chmod 600 ~/.config/openstack/clouds.yaml
+```
+
+### 4. Configure terraform.tfvars
+
+Look up the flavor name, image name, and network names from the **Rumble Cloud
+dashboard**, then fill them in:
+
+```sh
+cp terraform.tfvars.example terraform.tfvars
+$EDITOR terraform.tfvars
+```
 
 Alternatively, export `OS_*` env vars and remove the `cloud =` line from
-`providers.tf`.
+`providers.tf` if you prefer not to use `clouds.yaml`.
 
 ## Usage
 
 ```sh
-cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars        # fill in image/flavor/network names
-
 tofu init
 tofu plan
 tofu apply
@@ -108,9 +132,6 @@ To migrate, add a `backend` block to `versions.tf` and run `tofu init -migrate-s
 - **More security group rules** — e.g. Rustdesk self-hosted uses TCP
   21115–21119 and UDP 21116. Add corresponding
   `openstack_networking_secgroup_rule_v2` resources in `main.tf`.
-- **Volume-backed boot** — some OpenStack deployments require it. Replace the
-  `image_name` arg on `openstack_compute_instance_v2` with a `block_device`
-  block sourcing from `data.openstack_images_image_v2`.
 - **Additional providers** — add entries to `required_providers` in
   `versions.tf` and a matching `provider` block. Keep vendor-specific resources
   in their own `*.tf` files (e.g. `hetzner.tf`, `aws.tf`).
