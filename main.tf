@@ -74,7 +74,9 @@ resource "openstack_networking_port_v2" "web" {
 
 locals {
   cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    user_pubkey = trimspace(file(pathexpand(var.ssh_pubkey_path)))
+    user_pubkey   = trimspace(file(pathexpand(var.ssh_pubkey_path)))
+    proxy_domains = var.proxy_domains
+    certbot_email = var.certbot_email
   })
 }
 

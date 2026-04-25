@@ -53,3 +53,18 @@ variable "volume_size" {
   type        = number
   default     = 20
 }
+
+variable "proxy_domains" {
+  description = "Reverse-proxy virtual hosts to configure in nginx. Each entry requires a domain name and a backend upstream URL (e.g. http://127.0.0.1:3000). Certificates are issued separately via setup-ssl after DNS propagation."
+  type = list(object({
+    domain   = string
+    upstream = string
+  }))
+  default = []
+}
+
+variable "certbot_email" {
+  description = "Email address for Let's Encrypt certificate registration. Required when proxy_domains is non-empty."
+  type        = string
+  default     = ""
+}

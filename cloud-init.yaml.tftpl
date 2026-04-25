@@ -4,6 +4,8 @@ package_upgrade: true
 
 packages:
   - nginx
+  - certbot
+  - python3-certbot-nginx
   - ca-certificates
   - curl
   - gnupg
@@ -45,6 +47,48 @@ write_files:
       Unattended-Upgrade::Remove-Unused-Dependencies "true";
       Unattended-Upgrade::Automatic-Reboot "false";
 
+%{ for d in proxy_domains ~}
+  - path: /etc/nginx/sites-available/${d.domain}
+    content: |
+      server {
+          listen 80;
+          listen [::]:80;
+          server_name ${d.domain};
+
+          location / {
+              proxy_pass         ${d.upstream};
+              proxy_http_version 1.1;
+              proxy_set_header   Host              $$host;
+              proxy_set_header   X-Real-IP         $$remote_addr;
+              proxy_set_header   X-Forwarded-For   $$proxy_add_x_forwarded_for;
+              proxy_set_header   X-Forwarded-Proto $$scheme;
+              proxy_set_header   Upgrade           $$http_upgrade;
+              proxy_set_header   Connection        "upgrade";
+          }
+      }
+
+%{ endfor ~}
+  - path: /usr/local/bin/setup-ssl
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+%{ if length(proxy_domains) == 0 ~}
+      echo "No proxy_domains configured. Nothing to do." >&2
+      exit 0
+%{ else ~}
+      EMAIL="${certbot_email}"
+      if [ -z "$$EMAIL" ]; then
+        echo "certbot_email is not set. Edit /usr/local/bin/setup-ssl and set EMAIL." >&2
+        exit 1
+      fi
+%{ for d in proxy_domains ~}
+      certbot --nginx --non-interactive --agree-tos -m "$$EMAIL" -d ${d.domain}
+%{ endfor ~}
+      systemctl reload nginx
+      echo "SSL certificates issued and nginx reloaded."
+%{ endif ~}
+
 runcmd:
   # SSH keys
   - mkdir -p /home/ubuntu/.ssh
@@ -62,8 +106,16 @@ runcmd:
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   - usermod -aG docker ubuntu
 
+  # Nginx — disable default site, enable configured vhosts
+  - rm -f /etc/nginx/sites-enabled/default
+%{ for d in proxy_domains ~}
+  - ln -sf /etc/nginx/sites-available/${d.domain} /etc/nginx/sites-enabled/${d.domain}
+%{ endfor ~}
+  - nginx -t
+  - systemctl enable nginx
+  - systemctl restart nginx
+
   # Services
-  - systemctl enable --now nginx
   - systemctl enable --now docker
   - systemctl enable --now fail2ban
   - systemctl restart sshd

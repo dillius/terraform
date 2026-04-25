@@ -105,6 +105,86 @@ Two keys end up on the instance:
 2. **Your personal key** — read from `ssh_pubkey_path` and appended to
    `ubuntu`'s `authorized_keys` via cloud-init.
 
+## Domain proxying & SSL
+
+Set `proxy_domains` and `certbot_email` in `terraform.tfvars`:
+
+```hcl
+proxy_domains = [
+  { domain = "example.com",     upstream = "http://127.0.0.1:3000" },
+  { domain = "api.example.com", upstream = "http://127.0.0.1:8080" },
+]
+certbot_email = "you@example.com"
+```
+
+After `tofu apply`, cloud-init will:
+
+- Install `certbot` and `python3-certbot-nginx` via apt
+- Write an nginx reverse-proxy server block for each domain (HTTP on port 80)
+- Write `/usr/local/bin/setup-ssl` — the one-time SSL issuance script
+
+### Post-provision steps
+
+**1. Point DNS at the floating IP**
+
+Create an A record for each domain pointing to the address printed by
+`tofu output floating_ip`. DNS must resolve before Let's Encrypt can issue
+certificates.
+
+**2. Wait for DNS to propagate**
+
+```sh
+watch -n 10 dig +short example.com
+```
+
+Once `dig` returns the floating IP, proceed.
+
+**3. Issue certificates**
+
+```sh
+ssh ubuntu@<floating-ip>
+sudo /usr/local/bin/setup-ssl
+```
+
+This runs `certbot --nginx` for each configured domain, obtains Let's Encrypt
+certificates, and reloads nginx with HTTPS. Certbot's systemd timer handles
+renewals automatically — no further action needed.
+
+**4. Verify**
+
+```sh
+curl -I https://example.com
+```
+
+### Adding domains after initial provisioning
+
+`tofu apply` regenerates `user_data`, which forces instance replacement on the
+OpenStack provider — destroying the VM. For domains added later, make changes
+manually on the running instance instead:
+
+```sh
+# On the instance:
+sudo tee /etc/nginx/sites-available/newdomain.com > /dev/null <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+    server_name newdomain.com;
+
+    location / {
+        proxy_pass         http://127.0.0.1:PORT;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}
+EOF
+sudo ln -s /etc/nginx/sites-available/newdomain.com /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx --non-interactive --agree-tos -m you@example.com -d newdomain.com
+```
+
 ## State
 
 Local state (`terraform.tfstate`) for now. Fine for a single-operator personal
