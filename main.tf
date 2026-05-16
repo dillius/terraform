@@ -55,7 +55,7 @@ data "openstack_images_image_v2" "ubuntu" {
   name = var.image_name
 }
 
-data "openstack_networking_network_v2" "internal" {
+data "openstack_networking_network_v2" "web" {
   name = var.network_name
 }
 
@@ -67,16 +67,19 @@ resource "openstack_blockstorage_volume_v3" "boot" {
 
 resource "openstack_networking_port_v2" "web" {
   name               = "${var.instance_name}-port"
-  network_id         = data.openstack_networking_network_v2.internal.id
+  network_id         = data.openstack_networking_network_v2.web.id
   admin_state_up     = true
   security_group_ids = [openstack_networking_secgroup_v2.web.id]
 }
 
 locals {
   cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    user_pubkey   = trimspace(file(pathexpand(var.ssh_pubkey_path)))
-    proxy_domains = var.proxy_domains
-    certbot_email = var.certbot_email
+    user_pubkey     = trimspace(file(pathexpand(var.ssh_pubkey_path)))
+    proxy_domains   = var.proxy_domains
+    certbot_email   = var.certbot_email
+    install_nginx   = var.install_nginx
+    github_username = var.github_username
+    github_token    = var.github_token
   })
 }
 
@@ -99,11 +102,3 @@ resource "openstack_compute_instance_v2" "web" {
   }
 }
 
-resource "openstack_networking_floatingip_v2" "web" {
-  pool = var.external_network_name
-}
-
-resource "openstack_networking_floatingip_associate_v2" "web" {
-  floating_ip = openstack_networking_floatingip_v2.web.address
-  port_id     = openstack_networking_port_v2.web.id
-}

@@ -21,12 +21,7 @@ variable "flavor_name" {
 }
 
 variable "network_name" {
-  description = "Name of the internal OpenStack network to attach the instance to."
-  type        = string
-}
-
-variable "external_network_name" {
-  description = "Name of the external network used as the floating IP pool."
+  description = "Name of the OpenStack network to attach the instance to. For a single-VM setup on Rumble, set this to the external/public network so the instance gets a routable IP directly via DHCP — no router or floating IP needed."
   type        = string
 }
 
@@ -66,5 +61,24 @@ variable "proxy_domains" {
 variable "certbot_email" {
   description = "Email address for Let's Encrypt certificate registration. Required when proxy_domains is non-empty."
   type        = string
+  default     = ""
+}
+
+variable "github_username" {
+  description = "GitHub username for authenticating to GHCR (ghcr.io). Set alongside github_token to enable docker login on the instance."
+  type        = string
+  default     = ""
+}
+
+variable "install_nginx" {
+  description = "Install nginx and certbot from apt. Set to false when using Nginx Proxy Manager (or another reverse proxy) in Docker."
+  type        = bool
+  default     = false
+}
+
+variable "github_token" {
+  description = "GitHub Personal Access Token with read:packages scope. Used to docker login to ghcr.io on the instance. Stored in Terraform state — use a fine-grained token scoped to packages only."
+  type        = string
+  sensitive   = true
   default     = ""
 }

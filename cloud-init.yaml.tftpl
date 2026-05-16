@@ -3,9 +3,11 @@ package_update: true
 package_upgrade: true
 
 packages:
+%{ if install_nginx ~}
   - nginx
   - certbot
   - python3-certbot-nginx
+%{ endif ~}
   - ca-certificates
   - curl
   - gnupg
@@ -47,6 +49,7 @@ write_files:
       Unattended-Upgrade::Remove-Unused-Dependencies "true";
       Unattended-Upgrade::Automatic-Reboot "false";
 
+%{ if install_nginx ~}
 %{ for d in proxy_domains ~}
   - path: /etc/nginx/sites-available/${d.domain}
     content: |
@@ -88,6 +91,7 @@ write_files:
       systemctl reload nginx
       echo "SSL certificates issued and nginx reloaded."
 %{ endif ~}
+%{ endif ~}
 
 runcmd:
   # SSH keys
@@ -105,7 +109,12 @@ runcmd:
   - apt-get update
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   - usermod -aG docker ubuntu
+%{ if github_username != "" && github_token != "" ~}
+  - bash -c 'echo "${github_token}" | docker login ghcr.io -u "${github_username}" --password-stdin'
+  - bash -c 'cp -r /root/.docker /home/ubuntu/.docker && chown -R ubuntu:ubuntu /home/ubuntu/.docker'
+%{ endif ~}
 
+%{ if install_nginx ~}
   # Nginx — disable default site, enable configured vhosts
   - rm -f /etc/nginx/sites-enabled/default
 %{ for d in proxy_domains ~}
@@ -115,6 +124,7 @@ runcmd:
   - systemctl enable nginx
   - systemctl restart nginx
 
+%{ endif ~}
   # Services
   - systemctl enable --now docker
   - systemctl enable --now fail2ban

@@ -33,14 +33,18 @@ data.openstack_images_image_v2.ubuntu
   └─ openstack_blockstorage_volume_v3.boot  (20 GiB root volume)
         └─ openstack_compute_instance_v2.web  (block_device boot)
 
-data.openstack_networking_network_v2.internal
+data.openstack_networking_network_v2.web   (var.network_name — should be the public/provider network on Rumble, e.g. "PublicStatic")
   └─ openstack_networking_port_v2.web   (carries security group)
         └─ openstack_compute_instance_v2.web  (network { port = ... })
-        └─ openstack_networking_floatingip_associate_v2.web
-
-openstack_networking_floatingip_v2.web
-  └─ openstack_networking_floatingip_associate_v2.web
 ```
+
+The instance attaches **directly to `PublicEphemeral`** (a shared provider network on Rumble: `router:external = false`, `shared = true`, DHCP-enabled, subnet `207.5.194.0/23`). The port gets a routable public IP via DHCP. The address is exposed as the `public_ip` output, derived from `openstack_networking_port_v2.web.all_fixed_ips[0]`.
+
+**Rumble's two public networks:**
+- `PublicEphemeral` — shared, directly attachable by tenant VMs. Address may change if the port is recreated. Used here.
+- `PublicStatic` — external floating-IP pool (`router:external = true`, owned by a Rumble admin project, `shared = false`). Tenants cannot create ports on it directly; access is only via floating IPs through a router with external gateway. That pattern needs 2 slots of the default `public_ip = 1` quota (router gateway + floating IP), so it requires a quota raise.
+
+To switch to the `PublicStatic` + floating-IP pattern: set `network_name` to the *private* network, add `openstack_networking_router_v2` with `external_network_id` pointing at `PublicStatic`, add `openstack_networking_router_interface_v2` attaching the private subnet, and re-add `openstack_networking_floatingip_v2` + `floatingip_associate_v2`.
 
 Security groups are attached to `openstack_networking_port_v2.web`, not directly to the instance — this is why `openstack_compute_instance_v2.web` has no `security_groups` argument.
 

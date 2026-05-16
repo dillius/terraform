@@ -10,9 +10,14 @@ image_name    = "Ubuntu 24.04 LTS"
 flavor_name   = "s1a.small"
 volume_size   = 40
 
-# Networking — names vary by provider; check the Rumble/OpenStack dashboard
-network_name          = "private"
-external_network_name = "public"
+# Networking — Rumble exposes two public networks:
+#   PublicEphemeral — shared, DHCP-enabled, VMs attach directly. Address may
+#                     change if the port is recreated. Best for single-VM setups.
+#   PublicStatic   — external floating-IP pool. Needs a router with external
+#                     gateway + a floating IP, which together consume 2 slots of
+#                     the default `public_ip` quota of 1 — request a quota raise
+#                     before using this pattern.
+network_name = "PublicEphemeral"
 
 # Your personal SSH public key (installed alongside the TF-managed key)
 ssh_pubkey_path = "~/.ssh/id_rsa.pub"
@@ -20,9 +25,17 @@ ssh_pubkey_path = "~/.ssh/id_rsa.pub"
 # Optional: restrict SSH to your IP
 # allowed_ssh_cidrs = ["203.0.113.42/32"]
 
+# Install nginx + certbot from apt (default: false — use Nginx Proxy Manager in Docker instead)
+# install_nginx = true
+
 # Reverse-proxy virtual hosts (optional)
 # proxy_domains = [
 #   { domain = "example.com",     upstream = "http://127.0.0.1:3000" },
 #   { domain = "api.example.com", upstream = "http://127.0.0.1:8080" },
 # ]
 # certbot_email = "you@example.com"
+
+# GHCR credentials (optional) — enables `docker login ghcr.io` on the instance.
+# Use a fine-grained PAT with read:packages scope only.
+# github_username = "your-github-username"
+# github_token    = "ghp_..."
