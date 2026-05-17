@@ -1,0 +1,76 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me-to-a-strong-password}
+      - POSTGRES_DB=postgres
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      - shared-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 * * *   # daily at midnight
+      - WATCHTOWER_ROLLING_RESTARTS=true
+    networks:
+      - shared-network
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - ./portainer_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - shared-network
+    # No ports published — access via NPM (portainer.yourdomain.com)
+
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS
+      - "81:81"      # Admin UI (you can restrict this later with firewall or NPM itself)
+    environment:
+      - DB_SQLITE_FILE=/data/database.sqlite
+    volumes:
+      - ./npm_data:/data
+      - ./letsencrypt:/etc/letsencrypt
+    networks:
+      - shared-network
+    depends_on:
+      - postgres
+
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: grafana-lgtm
+    restart: unless-stopped
+    volumes:
+      - ./lgtm_data:/data
+    networks:
+      - shared-network
+    # No ports published — access Grafana via NPM (grafana.yourdomain.com → lgtm:3000)
+    # OTLP receivers are available internally on lgtm:4317 (gRPC) / lgtm:4318 (HTTP)
+
+networks:
+  shared-network:
+    name: shared-network
+    driver: bridge
