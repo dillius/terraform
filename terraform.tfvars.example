@@ -22,8 +22,9 @@ network_name = "PublicEphemeral"
 # Your personal SSH public key (installed alongside the TF-managed key)
 ssh_pubkey_path = "~/.ssh/id_rsa.pub"
 
-# Optional: restrict SSH to your IP
-# allowed_ssh_cidrs = ["203.0.113.42/32"]
+# Optional: restrict SSH and admin UI to your IP
+# allowed_ssh_cidrs   = ["203.0.113.42/32"]
+# allowed_admin_cidrs = ["203.0.113.42/32"]   # NPM admin (port 81) — lock this down after initial setup
 
 # Install nginx + certbot from apt (default: false — use Nginx Proxy Manager in Docker instead)
 # install_nginx = true
@@ -39,3 +40,22 @@ ssh_pubkey_path = "~/.ssh/id_rsa.pub"
 # Use a fine-grained PAT with read:packages scope only.
 # github_username = "your-github-username"
 # github_token    = "ghp_..."
+
+# Cloudflare DNS (optional) — creates A records pointing at the instance IP for
+# each domain in proxy_domains. Leave empty to skip.
+#
+# Token: dash.cloudflare.com/profile/api-tokens → "Create Token" → "Edit zone DNS"
+#        template. One token can cover multiple zones.
+# Zone ID: Cloudflare dashboard → your domain → Overview → right-hand panel.
+#
+# cloudflare_api_token = "..."
+# cloudflare_proxied   = false   # true = orange-cloud proxy/CDN (flip after certs are issued)
+#
+# All domains in one Cloudflare zone — set the global default:
+# cloudflare_zone_id = "abc123def456..."
+#
+# Domains across multiple zones — set cf_zone_id per entry (overrides the global default):
+# proxy_domains = [
+#   { domain = "example.com",    upstream = "http://127.0.0.1:3000", cf_zone_id = "abc123..." },
+#   { domain = "other-site.com", upstream = "http://127.0.0.1:8080", cf_zone_id = "def456..." },
+# ]

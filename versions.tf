@@ -14,5 +14,9 @@ terraform {
       source  = "hashicorp/local"
       version = "~> 2.5"
     }
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 4.0"
+    }
   }
 }

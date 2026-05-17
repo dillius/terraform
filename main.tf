@@ -51,6 +51,17 @@ resource "openstack_networking_secgroup_rule_v2" "https" {
   security_group_id = openstack_networking_secgroup_v2.web.id
 }
 
+resource "openstack_networking_secgroup_rule_v2" "npm_admin" {
+  for_each          = toset(var.allowed_admin_cidrs)
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  protocol          = "tcp"
+  port_range_min    = 81
+  port_range_max    = 81
+  remote_ip_prefix  = each.value
+  security_group_id = openstack_networking_secgroup_v2.web.id
+}
+
 data "openstack_images_image_v2" "ubuntu" {
   name = var.image_name
 }

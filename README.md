@@ -123,13 +123,60 @@ After `tofu apply`, cloud-init will:
 - Write an nginx reverse-proxy server block for each domain (HTTP on port 80)
 - Write `/usr/local/bin/setup-ssl` — the one-time SSL issuance script
 
+### Cloudflare DNS
+
+If you're managing DNS through Cloudflare, Terraform can create the A records
+automatically. Add your API token to `terraform.tfvars`:
+
+```hcl
+cloudflare_api_token = "..."   # Zone:DNS:Edit token — dash.cloudflare.com/profile/api-tokens
+```
+
+**Single zone** (all your domains live in one Cloudflare zone) — set the global
+default and every `proxy_domains` entry uses it:
+
+```hcl
+cloudflare_zone_id = "abc123..."   # zone Overview page, right-hand panel
+```
+
+**Multiple zones** — set `cf_zone_id` per entry instead (overrides the global
+default for that domain):
+
+```hcl
+proxy_domains = [
+  { domain = "example.com",    upstream = "http://127.0.0.1:3000", cf_zone_id = "abc123..." },
+  { domain = "other-site.com", upstream = "http://127.0.0.1:8080", cf_zone_id = "def456..." },
+]
+```
+
+You can mix both: set `cloudflare_zone_id` as the default for most domains and
+only specify `cf_zone_id` on entries that belong to a different zone.
+
+`cloudflare_proxied` defaults to `false` (plain DNS-only A records). **Leave it
+false until after certificates are issued.** Certbot's HTTP-01 challenge must
+reach your server directly — if traffic is routed through the Cloudflare proxy
+first, the challenge still works, but only if the zone's SSL/TLS mode is set to
+**Full** or **Full (Strict)**; the default "Flexible" mode causes a redirect
+loop that breaks certificate issuance.
+
+Once certs are in place and you want the orange-cloud benefits (DDoS mitigation,
+CDN, origin IP hidden from public DNS), flip the setting:
+
+```hcl
+cloudflare_proxied = true
+```
+
+Then set the zone's SSL/TLS mode to **Full (Strict)** in the Cloudflare
+dashboard and run `tofu apply`.
+
 ### Post-provision steps
 
-**1. Point DNS at the floating IP**
+**1. Point DNS at the instance IP**
 
-Create an A record for each domain pointing to the address printed by
-`tofu output floating_ip`. DNS must resolve before Let's Encrypt can issue
-certificates.
+If `cloudflare_zone_id` is set, `tofu apply` already created the A records —
+skip to step 2. Otherwise, create an A record for each domain pointing to the
+address printed by `tofu output public_ip`. DNS must resolve before Let's
+Encrypt can issue certificates.
 
 **2. Wait for DNS to propagate**
 

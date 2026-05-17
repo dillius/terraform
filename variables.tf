@@ -43,6 +43,12 @@ variable "allowed_web_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "allowed_admin_cidrs" {
+  description = "CIDR blocks permitted to reach the NPM admin UI (port 81). Restrict to your IP once the proxy is configured."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "volume_size" {
   description = "Size of the root block storage volume in GiB."
   type        = number
@@ -50,10 +56,11 @@ variable "volume_size" {
 }
 
 variable "proxy_domains" {
-  description = "Reverse-proxy virtual hosts to configure in nginx. Each entry requires a domain name and a backend upstream URL (e.g. http://127.0.0.1:3000). Certificates are issued separately via setup-ssl after DNS propagation."
+  description = "Reverse-proxy virtual hosts to configure in nginx. Each entry requires a domain name and a backend upstream URL (e.g. http://127.0.0.1:3000). Certificates are issued separately via setup-ssl after DNS propagation. Set cf_zone_id to override the global cloudflare_zone_id for domains in a different Cloudflare zone."
   type = list(object({
-    domain   = string
-    upstream = string
+    domain     = string
+    upstream   = string
+    cf_zone_id = optional(string, "")
   }))
   default = []
 }
@@ -81,4 +88,23 @@ variable "github_token" {
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with Zone:DNS:Edit permission. Create at dash.cloudflare.com/profile/api-tokens. Must be set alongside cloudflare_zone_id."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for the domain. Found in the right-hand panel on your zone's Overview page. When empty, no DNS records are created."
+  type        = string
+  default     = ""
+}
+
+variable "cloudflare_proxied" {
+  description = "Whether Cloudflare should proxy traffic (orange cloud). false = DNS-only A record. Keep false for initial certbot HTTP-01 certificate issuance; flip to true afterwards if desired."
+  type        = bool
+  default     = false
 }
