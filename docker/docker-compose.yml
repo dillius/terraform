@@ -58,6 +58,8 @@ services:
       - shared-network
     depends_on:
       - postgres
+    extra_hosts:
+     - "host.docker.internal:host-gateway"
 
   lgtm:
     image: grafana/otel-lgtm:latest
