@@ -15,7 +15,12 @@ and a locked-down security group.
 ├── outputs.tf               # floating IP, ssh command
 ├── cloud-init.yaml.tftpl    # cloud-init template (nginx, docker, keys)
 ├── terraform.tfvars.example # copy to terraform.tfvars and fill in
-└── .github/workflows/       # fmt + validate in CI (plan disabled, see below)
+├── .github/workflows/       # fmt + validate in CI (plan disabled, see below)
+└── docker/                  # shared services (deployed manually, not via tofu)
+    ├── docker-compose.yml
+    ├── otelcol-config.yaml           # extends grafana/otel-lgtm's default collector config
+    └── grafana-provisioning/
+        └── alerting/                 # contact point, notification policy, alert rules
 ```
 
 Flat, no modules. When you want a second host type (or a second provider),
@@ -231,6 +236,85 @@ sudo ln -s /etc/nginx/sites-available/newdomain.com /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx --non-interactive --agree-tos -m you@example.com -d newdomain.com
 ```
+
+## Monitoring & alerting
+
+`docker/docker-compose.yml` runs a metrics stack alongside the other shared
+services:
+
+- **`node-exporter`** — host CPU/memory/disk/load metrics.
+- **`cadvisor`** — per-container CPU/memory metrics.
+- **`lgtm`** (`grafana/otel-lgtm`) — bundles Grafana + a Prometheus instance +
+  its own OTel Collector. `docker/otelcol-config.yaml` is mounted in to add a
+  Prometheus scrape job pulling from `node-exporter` and `cadvisor`, so their
+  metrics land in the bundled Prometheus alongside anything sent via OTLP.
+- Alert rules, a notification policy, and an ntfy contact point are
+  provisioned from `docker/grafana-provisioning/alerting/` — CPU > 90% for
+  5m, available memory < 10% for 5m, and `node-exporter` scrape failures.
+
+None of this is exposed by `docker-compose.yml`'s `ports:` — it all rides
+`shared-network` and is reached through `nginx-proxy-manager` (`npm`), same
+as the other internal services.
+
+### Manual setup required
+
+**1. Set your ntfy topic before first deploy**
+
+Edit `docker/grafana-provisioning/alerting/contactpoints.yaml` and replace
+`CHANGE-ME-terraform-alerts` in the `url:` field with a topic name of your
+own choosing. ntfy.sh topics are unauthenticated by default — anyone who
+guesses the name can read or publish to it — so pick something long/random,
+or self-host ntfy if you want it locked down. Subscribe to the topic in the
+[ntfy app](https://ntfy.sh/) (or `ntfy subscribe <topic>` via CLI) to
+actually receive the pushes.
+
+**2. Bring the stack up**
+
+```sh
+ssh ubuntu@<floating-ip>
+cd ~/docker   # wherever docker-compose.yml was deployed
+docker compose up -d
+```
+
+Grafana provisions the alert rules/contact point/policy automatically on
+startup by reading the mounted `grafana-provisioning/alerting/` files — no
+manual UI step needed for alerting itself.
+
+**3. Expose Grafana through nginx-proxy-manager**
+
+The `npm` container already handles HTTP(S)/certs for everything else. Add
+Grafana as a new proxy host:
+
+1. Open the NPM admin UI (`http://<floating-ip>:81`, or via a domain if
+   you've proxied it — default login `admin@example.com` / `changeme` on
+   first run, change immediately).
+2. **Proxy Hosts → Add Proxy Host**:
+   - Domain Names: `grafana.yourdomain.com`
+   - Scheme: `http`
+   - Forward Hostname/IP: `lgtm` (container name — both are on
+     `shared-network`, so NPM resolves it by Docker DNS)
+   - Forward Port: `3000`
+   - Enable **Websockets Support** (Grafana's live-updating dashboards use
+     them)
+3. **SSL tab**: request a new Let's Encrypt certificate, force SSL.
+4. Point DNS for `grafana.yourdomain.com` at the instance (same as any other
+   `proxy_domains` entry — via Cloudflare or manually; see
+   [Domain proxying & SSL](#domain-proxying--ssl)). This domain isn't managed
+   by `proxy_domains`/Terraform since it's an NPM-only route to an internal
+   Docker service, not an nginx vhost written by cloud-init.
+5. Visit `https://grafana.yourdomain.com` — anonymous viewer access is
+   enabled by default (`GF_AUTH_ANONYMOUS_ENABLED=true` in the image), so
+   dashboards are visible without logging in. Lock this down with
+   `GF_AUTH_ANONYMOUS_ENABLED=false` (and a real admin password) before
+   putting it on a public domain, or keep it off a public domain / behind
+   NPM access-list rules if you'd rather not deal with auth yet.
+
+**4. Import dashboards**
+
+The image ships JVM/RED dashboards but nothing for `node-exporter`/`cadvisor`
+out of the box. In Grafana: **Dashboards → New → Import**, and use the
+community dashboard IDs `1860` (Node Exporter Full) and `19908` or `14282`
+(cAdvisor) against the pre-provisioned `Prometheus` data source.
 
 ## State
 

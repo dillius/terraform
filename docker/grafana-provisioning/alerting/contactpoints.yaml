@@ -1,0 +1,24 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: ntfy
+    receivers:
+      - uid: ntfy-webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          # Replace with your own topic — anyone who knows the name can read
+          # or publish to it, since ntfy.sh topics are unauthenticated by
+          # default. Pick something hard to guess (or self-host ntfy).
+          url: https://ntfy.sh/CHANGE-ME-terraform-alerts
+          httpMethod: POST
+          headers:
+            Title: Grafana Alert
+            Priority: urgent
+            Tags: warning,rotating_light
+          payload:
+            template: |
+              {{ range .Alerts }}[{{ .Status }}] {{ .Labels.alertname }} ({{ .Labels.instance }})
+              {{ .Annotations.summary }}
+              {{ end }}

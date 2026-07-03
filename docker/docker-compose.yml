@@ -67,10 +67,49 @@ services:
     restart: unless-stopped
     volumes:
       - ./lgtm_data:/data
+      - ./otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
+      - ./grafana-provisioning/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
     networks:
       - shared-network
+    depends_on:
+      - node-exporter
+      - cadvisor
     # No ports published — access Grafana via NPM (grafana.yourdomain.com → lgtm:3000)
     # OTLP receivers are available internally on lgtm:4317 (gRPC) / lgtm:4318 (HTTP)
+    # otelcol-config.yaml adds a Prometheus receiver that scrapes node-exporter and
+    # cadvisor, feeding host/container CPU+mem into the same bundled Prometheus.
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - shared-network
+    # No ports published — scraped internally by lgtm's otelcol on node-exporter:9100
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - shared-network
+    # No ports published — scraped internally by lgtm's otelcol on cadvisor:8080
 
 networks:
   shared-network:

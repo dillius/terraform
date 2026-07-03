@@ -23,3 +23,8 @@ terraform.tfvars.json
 
 # Generated SSH keys
 .ssh/
+
+# Editor swap/temp files
+*.swp
+*.swo
+*~

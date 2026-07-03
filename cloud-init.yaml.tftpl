@@ -16,6 +16,12 @@ packages:
   - unattended-upgrades
 
 write_files:
+  - path: /home/ubuntu/scripts/infra/docker-compose.yml
+    owner: ubuntu:ubuntu
+    permissions: "0644"
+    content: |
+      ${indent(6, compose_content)}
+
   - path: /etc/ssh/sshd_config.d/99-hardening.conf
     content: |
       PermitRootLogin no
@@ -130,10 +136,15 @@ runcmd:
   - systemctl enable --now fail2ban
   - systemctl restart sshd
 
+  # Infra stack
+  - chown -R ubuntu:ubuntu /home/ubuntu/scripts
+  - su -l ubuntu -c 'cd /home/ubuntu/scripts/infra && docker compose up -d'
+
   # UFW — allow only what the security group already permits, then enable
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow 22/tcp
   - ufw allow 80/tcp
   - ufw allow 443/tcp
+  - ufw allow 81/tcp
   - ufw --force enable

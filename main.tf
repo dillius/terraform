@@ -85,12 +85,13 @@ resource "openstack_networking_port_v2" "web" {
 
 locals {
   cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    user_pubkey     = trimspace(file(pathexpand(var.ssh_pubkey_path)))
-    proxy_domains   = var.proxy_domains
-    certbot_email   = var.certbot_email
-    install_nginx   = var.install_nginx
-    github_username = var.github_username
-    github_token    = var.github_token
+    user_pubkey      = trimspace(file(pathexpand(var.ssh_pubkey_path)))
+    proxy_domains    = var.proxy_domains
+    certbot_email    = var.certbot_email
+    install_nginx    = var.install_nginx
+    github_username  = var.github_username
+    github_token     = var.github_token
+    compose_content  = file("${path.module}/docker/docker-compose.yml")
   })
 }
 
@@ -99,6 +100,10 @@ resource "openstack_compute_instance_v2" "web" {
   flavor_name = var.flavor_name
   key_pair    = openstack_compute_keypair_v2.tf.name
   user_data   = local.cloud_init
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 
   block_device {
     uuid                  = openstack_blockstorage_volume_v3.boot.id
