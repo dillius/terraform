@@ -129,7 +129,7 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     command:
-      - '--disable_metrics=accelerator,cpu_topology,hugetlb,percpu,resctrl,sched,tcp,udp,diskIO'
+      - '--disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,diskIO'
     networks:
       - shared-network
     # No ports published — scraped internally by lgtm's otelcol on cadvisor:8080
