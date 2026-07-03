@@ -268,7 +268,16 @@ or self-host ntfy if you want it locked down. Subscribe to the topic in the
 [ntfy app](https://ntfy.sh/) (or `ntfy subscribe <topic>` via CLI) to
 actually receive the pushes.
 
-**2. Bring the stack up**
+**2. Set a real Grafana admin password before first deploy**
+
+The `lgtm` service disables anonymous access (the image otherwise defaults
+to anonymous users getting **Admin** role — not just read-only viewing).
+Edit `docker/docker-compose.yml` and replace
+`CHANGE-ME-grafana-admin-password` in `GF_SECURITY_ADMIN_PASSWORD` under the
+`lgtm` service with a real password. Log in at the Grafana URL with user
+`admin` and that password.
+
+**3. Bring the stack up**
 
 ```sh
 ssh ubuntu@<floating-ip>
@@ -280,7 +289,7 @@ Grafana provisions the alert rules/contact point/policy automatically on
 startup by reading the mounted `grafana-provisioning/alerting/` files — no
 manual UI step needed for alerting itself.
 
-**3. Expose Grafana through nginx-proxy-manager**
+**4. Expose Grafana through nginx-proxy-manager**
 
 The `npm` container already handles HTTP(S)/certs for everything else. Add
 Grafana as a new proxy host:
@@ -302,19 +311,29 @@ Grafana as a new proxy host:
    [Domain proxying & SSL](#domain-proxying--ssl)). This domain isn't managed
    by `proxy_domains`/Terraform since it's an NPM-only route to an internal
    Docker service, not an nginx vhost written by cloud-init.
-5. Visit `https://grafana.yourdomain.com` — anonymous viewer access is
-   enabled by default (`GF_AUTH_ANONYMOUS_ENABLED=true` in the image), so
-   dashboards are visible without logging in. Lock this down with
-   `GF_AUTH_ANONYMOUS_ENABLED=false` (and a real admin password) before
-   putting it on a public domain, or keep it off a public domain / behind
-   NPM access-list rules if you'd rather not deal with auth yet.
+5. Visit `https://grafana.yourdomain.com` and log in with `admin` / the
+   password you set in step 2.
 
-**4. Import dashboards**
+**5. Import dashboards**
 
-The image ships JVM/RED dashboards but nothing for `node-exporter`/`cadvisor`
-out of the box. In Grafana: **Dashboards → New → Import**, and use the
-community dashboard IDs `1860` (Node Exporter Full) and `19908` or `14282`
-(cAdvisor) against the pre-provisioned `Prometheus` data source.
+The image ships JVM/RED dashboards for OTLP-instrumented apps, but nothing
+for the host/container metrics this setup adds. `cadvisor` collects
+per-container stats for *every* container on the box, so it covers
+`postgres`, `npm`, `portainer`, and `watchtower` too — no per-service
+exporter needed for basic CPU/memory visibility into any of them.
+
+In Grafana: **Dashboards → New → Import**, paste the dashboard ID, and point
+it at the pre-provisioned `Prometheus` data source (uid `prometheus`).
+
+| ID | Dashboard | Covers |
+|----|-----------|--------|
+| [1860](https://grafana.com/grafana/dashboards/1860) | Node Exporter Full | Host CPU, memory, disk, load, network |
+| [19908](https://grafana.com/grafana/dashboards/19908) | cAdvisor / Docker container overview | Per-container CPU/memory for every service, including `postgres`, `npm`, `portainer`, `watchtower`, `lgtm` itself |
+
+If you later want deeper-than-CPU/mem insight — Postgres connections/query
+stats, or NPM request rates and status codes — that needs a dedicated
+exporter added as a new container (`postgres_exporter`, an nginx log
+exporter), not just a dashboard import.
 
 ## State
 

@@ -65,6 +65,12 @@ services:
     image: grafana/otel-lgtm:latest
     container_name: grafana-lgtm
     restart: unless-stopped
+    environment:
+      # The image defaults to anonymous access with Admin role — lock that
+      # down. CHANGE-ME-grafana-admin-password is a placeholder — replace it.
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=CHANGE-ME-grafana-admin-password
     volumes:
       - ./lgtm_data:/data
       - ./otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
