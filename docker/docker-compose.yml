@@ -65,6 +65,7 @@ services:
     image: grafana/otel-lgtm:latest
     container_name: grafana-lgtm
     restart: unless-stopped
+    mem_limit: 1g
     environment:
       # The image defaults to anonymous access with Admin role — lock that
       # down. CHANGE-ME-grafana-admin-password is a placeholder — replace it.
@@ -113,6 +114,8 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
+    command:
+      - '--disable_metrics=accelerator,cpu_topology,hugetlb,percpu,resctrl,sched,tcp,udp,diskIO'
     networks:
       - shared-network
     # No ports published — scraped internally by lgtm's otelcol on cadvisor:8080

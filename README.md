@@ -365,3 +365,25 @@ To migrate, add a `backend` block to `versions.tf` and run `tofu init -migrate-s
 - **Additional providers** — add entries to `required_providers` in
   `versions.tf` and a matching `provider` block. Keep vendor-specific resources
   in their own `*.tf` files (e.g. `hetzner.tf`, `aws.tf`).
+
+## Resizing the instance
+
+To check the current flavor and see what else is available:
+
+```sh
+openstack server list -f json                 # current flavor, under "Flavor"
+openstack flavor list -f json                  # all flavors available on the project
+openstack flavor show <flavor-name> -f json    # RAM/vCPU/disk + rumble:* properties for one flavor
+```
+
+Rumble's flavor families (shared-compute `s1a`, compute-optimized `c2a`,
+general-purpose `m2a`, memory-optimized `r2a`) each scale from `large`/`micro`
+up through `Nxlarge`. All of them report `disk: 0` — the root disk here is the
+separate `openstack_blockstorage_volume_v3.boot` volume, so a resize only
+changes CPU/RAM and never touches your data volume.
+
+To resize, change `flavor_name` on `openstack_compute_instance_v2.web` in
+`main.tf` and run `tofu apply`. The OpenStack provider does this as an
+in-place resize, not a destroy/recreate — the boot volume, port, and public IP
+all survive. Nova stops the instance during the resize and Terraform confirms
+it automatically, so expect a minute or two of downtime.
