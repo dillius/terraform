@@ -366,6 +366,40 @@ To migrate, add a `backend` block to `versions.tf` and run `tofu init -migrate-s
   `versions.tf` and a matching `provider` block. Keep vendor-specific resources
   in their own `*.tf` files (e.g. `hetzner.tf`, `aws.tf`).
 
+## Memory management on small flavors
+
+The `docker/docker-compose.yml` services all carry a `mem_limit` sized for an
+`s1a.medium` (4 GB) host running the infra stack plus a couple of Node.js/JVM
+apps alongside it. If you add services or move to a smaller flavor, revisit
+these limits — a container hitting its `mem_limit` gets OOM-killed (and
+restarted per `restart: unless-stopped`) rather than starving the host, which
+is deliberate, but a limit set too low just means frequent restarts instead of
+a real fix.
+
+`cloud-init.yaml.tftpl` provisions a 2 GB swapfile on first boot
+(`vm.swappiness=10`, so it's used as a burst cushion, not a substitute for
+having enough RAM). This only applies to *new* instances — changing
+`cloud-init.yaml.tftpl` regenerates `user_data`, which forces instance
+replacement on `tofu apply` (see
+[Adding domains after initial provisioning](#adding-domains-after-initial-provisioning)).
+To add swap to an already-running instance without replacing it, run the
+equivalent commands manually over SSH:
+
+```sh
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
+sudo sysctl -w vm.swappiness=10
+echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
+```
+
+For JVM and Node.js apps you deploy alongside this stack, set explicit memory
+ceilings rather than relying on runtime defaults — `-Xmx` for the JVM,
+`--max-old-space-size` for Node — since both otherwise size themselves off
+total visible host memory, which can over-allocate on a small instance.
+
 ## Resizing the instance
 
 To check the current flavor and see what else is available:

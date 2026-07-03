@@ -100,6 +100,16 @@ write_files:
 %{ endif ~}
 
 runcmd:
+  # Swap — cushions transient memory spikes (JVM GC, traffic bursts) without
+  # OOM-killing the whole host. Not a substitute for sizing mem_limits sanely.
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - bash -c 'echo "/swapfile none swap sw 0 0" >> /etc/fstab'
+  - sysctl -w vm.swappiness=10
+  - bash -c 'echo "vm.swappiness=10" >> /etc/sysctl.conf'
+
   # SSH keys
   - mkdir -p /home/ubuntu/.ssh
   - bash -c 'echo "${user_pubkey}" >> /home/ubuntu/.ssh/authorized_keys'
