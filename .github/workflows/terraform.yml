@@ -5,6 +5,7 @@ on:
     paths:
       - '**.tf'
       - '**.tftpl'
+      - 'docker/**'
       - '.github/workflows/terraform.yml'
   workflow_dispatch:
 
@@ -22,7 +23,8 @@ jobs:
       - name: Setup OpenTofu
         uses: opentofu/setup-opentofu@v1
         with:
-          tofu_version: "1.8.0"
+          # Keep near local/dev OpenTofu; required_version is still >= 1.6.0
+          tofu_version: "1.9.1"
 
       - name: tofu fmt
         run: tofu fmt -check -recursive

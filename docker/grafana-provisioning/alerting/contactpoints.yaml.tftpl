@@ -8,10 +8,9 @@ contactPoints:
         type: webhook
         disableResolveMessage: false
         settings:
-          # Replace with your own topic — anyone who knows the name can read
-          # or publish to it, since ntfy.sh topics are unauthenticated by
-          # default. Pick something hard to guess (or self-host ntfy).
-          url: https://ntfy.sh/CHANGE-ME-terraform-alerts
+          # Topic is injected by null_resource.host_config from var.ntfy_topic.
+          # ntfy.sh topics are unauthenticated by default — use a hard-to-guess name.
+          url: https://ntfy.sh/${ntfy_topic}
           httpMethod: POST
           headers:
             Title: Grafana Alert

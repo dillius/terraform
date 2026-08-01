@@ -1,4 +1,7 @@
 #cloud-config
+# Bootstrap only — first boot. Day-2 host config (docker compose stack, GHCR
+# login, secrets) is applied by null_resource.host_config in host.tf so it can
+# re-run on tofu apply without replacing the instance.
 package_update: true
 package_upgrade: true
 
@@ -16,12 +19,6 @@ packages:
   - unattended-upgrades
 
 write_files:
-  - path: /home/ubuntu/scripts/infra/docker-compose.yml
-    owner: ubuntu:ubuntu
-    permissions: "0644"
-    content: |
-      ${indent(6, compose_content)}
-
   - path: /etc/ssh/sshd_config.d/99-hardening.conf
     content: |
       PermitRootLogin no
@@ -100,8 +97,8 @@ write_files:
 %{ endif ~}
 
 runcmd:
-  # Swap — cushions transient memory spikes (JVM GC, traffic bursts) without
-  # OOM-killing the whole host. Not a substitute for sizing mem_limits sanely.
+  # Swap — cushions transient memory spikes without OOM-killing the host.
+  # Not a substitute for sizing mem_limits and flavor RAM sanely.
   - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
@@ -110,14 +107,14 @@ runcmd:
   - sysctl -w vm.swappiness=10
   - bash -c 'echo "vm.swappiness=10" >> /etc/sysctl.conf'
 
-  # SSH keys
+  # Personal SSH key (OpenStack keypair is injected separately via key_pair)
   - mkdir -p /home/ubuntu/.ssh
   - bash -c 'echo "${user_pubkey}" >> /home/ubuntu/.ssh/authorized_keys'
   - chown -R ubuntu:ubuntu /home/ubuntu/.ssh
   - chmod 700 /home/ubuntu/.ssh
   - chmod 600 /home/ubuntu/.ssh/authorized_keys
 
-  # Docker
+  # Docker engine — stack deploy happens later via null_resource.host_config
   - install -m 0755 -d /etc/apt/keyrings
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
   - chmod a+r /etc/apt/keyrings/docker.asc
@@ -125,13 +122,9 @@ runcmd:
   - apt-get update
   - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   - usermod -aG docker ubuntu
-%{ if github_username != "" && github_token != "" ~}
-  - bash -c 'echo "${github_token}" | docker login ghcr.io -u "${github_username}" --password-stdin'
-  - bash -c 'cp -r /root/.docker /home/ubuntu/.docker && chown -R ubuntu:ubuntu /home/ubuntu/.docker'
-%{ endif ~}
+  - systemctl enable --now docker
 
 %{ if install_nginx ~}
-  # Nginx — disable default site, enable configured vhosts
   - rm -f /etc/nginx/sites-enabled/default
 %{ for d in proxy_domains ~}
   - ln -sf /etc/nginx/sites-available/${d.domain} /etc/nginx/sites-enabled/${d.domain}
@@ -139,18 +132,13 @@ runcmd:
   - nginx -t
   - systemctl enable nginx
   - systemctl restart nginx
-
 %{ endif ~}
-  # Services
-  - systemctl enable --now docker
+
   - systemctl enable --now fail2ban
   - systemctl restart sshd
 
-  # Infra stack
-  - chown -R ubuntu:ubuntu /home/ubuntu/scripts
-  - su -l ubuntu -c 'cd /home/ubuntu/scripts/infra && docker compose up -d'
-
-  # UFW — allow only what the security group already permits, then enable
+  # Host firewall — defence in depth. Real IP restrictions for SSH/admin are
+  # enforced by OpenStack security groups (allowed_ssh_cidrs / allowed_admin_cidrs).
   - ufw default deny incoming
   - ufw default allow outgoing
   - ufw allow 22/tcp

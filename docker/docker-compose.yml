@@ -1,3 +1,13 @@
+# Shared infra stack. Deployed by null_resource.host_config (host.tf) to
+# /home/ubuntu/scripts/infra — including this file, otelcol-config, grafana
+# provisioning, and a generated .env (secrets are not committed).
+#
+# mem_limits assume ~4 GiB host RAM (e.g. Rumble s1a.medium). Shrink limits or
+# drop services before using a smaller flavor.
+#
+# Watchtower only updates containers labeled
+# com.centurylinklabs.watchtower.enable=true (Postgres is intentionally unlabeled).
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -14,8 +24,8 @@ services:
       - max_connections=50
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change-me-to-a-strong-password}
-      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-postgres}
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
     networks:
@@ -27,7 +37,7 @@ services:
       retries: 5
 
   watchtower:
-    image: nickfedor/watchtower:latest
+    image: nickfedor/watchtower:1.20.2
     container_name: watchtower
     restart: unless-stopped
     mem_limit: 64m
@@ -35,71 +45,75 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
       - WATCHTOWER_SCHEDULE=0 0 * * *   # daily at midnight
       - WATCHTOWER_ROLLING_RESTARTS=true
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
 
   portainer:
-    image: portainer/portainer-ce:latest
+    image: portainer/portainer-ce:2.27.9
     container_name: portainer
     restart: unless-stopped
     mem_limit: 128m
     volumes:
       - ./portainer_data:/data
       - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
     # No ports published — access via NPM (portainer.yourdomain.com)
 
   npm:
-    image: jc21/nginx-proxy-manager:latest
+    image: jc21/nginx-proxy-manager:2.12.3
     container_name: nginx-proxy-manager
     restart: unless-stopped
     mem_limit: 256m
     ports:
       - "80:80"      # HTTP
       - "443:443"    # HTTPS
-      - "81:81"      # Admin UI (you can restrict this later with firewall or NPM itself)
+      - "81:81"      # Admin UI — lock down via allowed_admin_cidrs (security group)
     environment:
       - DB_SQLITE_FILE=/data/database.sqlite
     volumes:
       - ./npm_data:/data
       - ./letsencrypt:/etc/letsencrypt
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
-    depends_on:
-      - postgres
+    # Uses SQLite; postgres above is for your apps on shared-network, not NPM.
     extra_hosts:
-     - "host.docker.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
 
   lgtm:
-    image: grafana/otel-lgtm:latest
+    image: grafana/otel-lgtm:0.30.0
     container_name: grafana-lgtm
     restart: unless-stopped
     mem_limit: 1g
     environment:
-      # The image defaults to anonymous access with Admin role — lock that
-      # down. CHANGE-ME-grafana-admin-password is a placeholder — replace it.
       - GF_AUTH_ANONYMOUS_ENABLED=false
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=CHANGE-ME-grafana-admin-password
+      - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?set GF_SECURITY_ADMIN_PASSWORD in .env}
     volumes:
       - ./lgtm_data:/data
       - ./otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
       - ./grafana-provisioning/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
     depends_on:
       - node-exporter
       - cadvisor
     # No ports published — access Grafana via NPM (grafana.yourdomain.com → lgtm:3000)
-    # OTLP receivers are available internally on lgtm:4317 (gRPC) / lgtm:4318 (HTTP)
-    # otelcol-config.yaml adds a Prometheus receiver that scrapes node-exporter and
-    # cadvisor, feeding host/container CPU+mem into the same bundled Prometheus.
+    # OTLP: lgtm:4317 (gRPC) / lgtm:4318 (HTTP) on shared-network
 
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.9.1
     container_name: node-exporter
     restart: unless-stopped
     mem_limit: 64m
@@ -112,12 +126,13 @@ services:
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/host/root'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
-    # No ports published — scraped internally by lgtm's otelcol on node-exporter:9100
 
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
     container_name: cadvisor
     restart: unless-stopped
     privileged: true
@@ -130,9 +145,10 @@ services:
       - /dev/disk/:/dev/disk:ro
     command:
       - '--disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,process,referenced_memory,resctrl,sched,tcp,udp,percpu,diskIO'
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
     networks:
       - shared-network
-    # No ports published — scraped internally by lgtm's otelcol on cadvisor:8080
 
 networks:
   shared-network:

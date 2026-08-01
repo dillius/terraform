@@ -21,6 +21,10 @@ terraform.tfvars
 terraform.tfvars.json
 !terraform.tfvars.example
 
+# Local compose env (host gets .env from null_resource.host_config)
+.env
+docker/.env
+
 # Generated SSH keys
 .ssh/
 

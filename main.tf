@@ -63,7 +63,8 @@ resource "openstack_networking_secgroup_rule_v2" "npm_admin" {
 }
 
 data "openstack_images_image_v2" "ubuntu" {
-  name = var.image_name
+  name        = var.image_name
+  most_recent = true
 }
 
 data "openstack_networking_network_v2" "web" {
@@ -74,6 +75,12 @@ resource "openstack_blockstorage_volume_v3" "boot" {
   name     = "${var.instance_name}-boot"
   size     = var.volume_size
   image_id = data.openstack_images_image_v2.ubuntu.id
+
+  # Avoid recreating the boot volume (and cascading instance replacement) when
+  # the cloud publishes a newer image with the same name.
+  lifecycle {
+    ignore_changes = [image_id]
+  }
 }
 
 resource "openstack_networking_port_v2" "web" {
@@ -84,14 +91,13 @@ resource "openstack_networking_port_v2" "web" {
 }
 
 locals {
+  # First-boot only. Day-2 changes go through null_resource.host_config (host.tf).
+  # user_data is ignored after create so apply does not replace the instance.
   cloud_init = templatefile("${path.module}/cloud-init.yaml.tftpl", {
-    user_pubkey      = trimspace(file(pathexpand(var.ssh_pubkey_path)))
-    proxy_domains    = var.proxy_domains
-    certbot_email    = var.certbot_email
-    install_nginx    = var.install_nginx
-    github_username  = var.github_username
-    github_token     = var.github_token
-    compose_content  = file("${path.module}/docker/docker-compose.yml")
+    user_pubkey   = trimspace(file(pathexpand(var.ssh_pubkey_path)))
+    proxy_domains = var.proxy_domains
+    certbot_email = var.certbot_email
+    install_nginx = var.install_nginx
   })
 }
 
@@ -117,4 +123,3 @@ resource "openstack_compute_instance_v2" "web" {
     port = openstack_networking_port_v2.web.id
   }
 }
-
